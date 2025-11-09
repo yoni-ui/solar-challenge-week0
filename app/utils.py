@@ -1,7 +1,7 @@
 import pandas as pd
-import streamlit as st
 import numpy as np
 from datetime import datetime
+import streamlit as st 
 
 # Define the relative path where cleaned data is expected
 DATA_DIR = '../data/' 
@@ -17,31 +17,40 @@ def load_and_preprocess_data():
     """
     all_data = []
     
+    # --- 1. Attempt to load real data ---
     try:
         for country in COUNTRIES:
             file_path = f'{DATA_DIR}{country.lower()}_clean.csv'
+            
+            # This line raises FileNotFoundError if the file is missing
             df = pd.read_csv(file_path)
             
             # Ensure proper datetime format
             df['TIMESTAMP'] = pd.to_datetime(df['TIMESTAMP'])
             df.set_index('TIMESTAMP', inplace=True)
             
-            # Ensure GHI is present and handle potential missingness after cleaning
+            # Ensure GHI is present
             if 'GHI' not in df.columns:
-                 raise ValueError(f"GHI column missing in {file_path}")
+                 st.warning(f"GHI column missing in {country}'s data. Skipping real data load for this country.")
+                 continue # Skip to the next country
             
             df['Country'] = country
+            # Append only the necessary columns (GHI and Country)
             all_data.append(df[['GHI', 'Country']])
 
     except FileNotFoundError:
-        # Fallback: Generate mock data if cleaned CSVs are not found (for demonstration/testing)
+        # --- 2. Fallback to Mock Data ---
         st.warning("Cleaned CSV files not found. Generating mock data for visualization.")
+        all_data = [] # Reset all_data list to ensure it's clean for mock data
+        
         start_date = datetime(2022, 1, 1)
         end_date = datetime(2023, 1, 1)
         
         for country in COUNTRIES:
-            dates = pd.date_range(start=start_date, end=end_date, freq='H', inclusive='left')
-            # Mock GHI based on country (e.g., lower std dev for 'Togo' to show variance)
+            # FIX: Using inclusive='left' instead of 'closed' for modern pandas versions
+            dates = pd.date_range(start=start_date, end=end_date, freq='H', inclusive='left') 
+            
+            # Mock GHI data generation
             if country == 'Benin':
                 ghi = np.random.normal(loc=300, scale=350, size=len(dates))
             elif country == 'Sierra_Leone':
@@ -56,6 +65,11 @@ def load_and_preprocess_data():
             df.index.name = 'TIMESTAMP'
             df['Country'] = country
             all_data.append(df)
+
+    # --- 3. Final Concatenation ---
+    if not all_data:
+        # This safeguard should now only be hit if file loading failed AND mock data generation also failed
+        raise ValueError("No objects to concatenate: Data loading failed in both real and mock modes.")
 
     # Combine all data into one DataFrame
     combined_df = pd.concat(all_data)
